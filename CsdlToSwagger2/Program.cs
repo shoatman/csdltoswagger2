@@ -189,11 +189,11 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
         /// <summary>
         /// Parameters controlling the swagger generation
         /// </summary>
-        private const string metadataURI = @"C:\Users\shoatman\Downloads\msgraph.xml";
+        private const string metadataURI = @"D:\projects\csdltoswagger2\CsdlToSwagger2\msgraph.xml";
         private const string host = "services.odata.org";
         private const string version = "1.0";
         private const string basePath = "/v1.0";
-        private const string outputFile = @"c:\projects\graph\msgraph.json";
+        private const string outputFile = @"D:\projects\csdltoswagger2\CsdlToSwagger2\msgraph.json";
 
         /// <summary>
         /// Returns the swagger API Operations (Get, Post) associated with an Entity Set (Collection)
@@ -234,6 +234,31 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         )
                         .Responses(new JObject()
                             .Response("200", "EntitySet " + entitySet.Name, entitySet.EntityType())
+                            .DefaultErrorResponse()
+                        )
+                }
+            };
+        }
+
+        static JObject CreatePathItemObjectForNavigationPropertyEntitySet(IEdmNavigationProperty navProp)
+        {
+            IEdmEntityType targetEntity = navProp.ToEntityType();
+            return new JObject()
+            {
+                {
+                    "get", new JObject()
+                        .Summary("Get navigation property collection " + navProp.Name)
+                        .Description("Returns the  " + navProp.Name + " collection")
+                        .Parameters(new JArray()
+                            .Parameter("$expand", "query", "Expand navigation property", "string")
+                            .Parameter("$select", "query", "select structural property", "string")
+                            .Parameter("$orderby", "query", "order by some property", "string")
+                            .Parameter("$top", "query", "top elements", "integer")
+                            .Parameter("$skip", "query", "skip elements", "integer")
+                            .Parameter("$count", "query", "inlcude count in response", "boolean")
+                        )
+                        .Responses(new JObject()
+                            .Response("200", "EntitySet " + navProp.Name, targetEntity)
                             .DefaultErrorResponse()
                         )
                 }
@@ -300,8 +325,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             };
         }
 
-        
-
+       
         /// <summary>
         /// Returns the path (uri) associated with a collection and/or element
         /// </summary>
@@ -309,27 +333,42 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
         /// <returns></returns>
         static string GetPathForEntity(IEdmEntitySet entitySet)
         {
-            string singleEntityPath = "/" + entitySet.Name + "/";
+            string singleEntityPath = "/" + entitySet.Name;
             foreach (var key in entitySet.EntityType().Key())
             {
-                //if (key.Type.Definition.TypeKind == EdmTypeKind.Primitive &&
-                //    (key.Type.Definition as IEdmPrimitiveType).PrimitiveKind == EdmPrimitiveTypeKind.String)
-                //{
-                //    singleEntityPath += "'{" + key.Name + "}', ";
-                //}
-                //else
-                //{
-                    singleEntityPath += "{" + key.Name + "}";
-                //}
+                singleEntityPath += "/{" + key.Name + "}";
             }
-            //singleEntityPath = singleEntityPath.Substring(0, singleEntityPath.Length - 2);
-            //singleEntityPath += ")";
 
             return singleEntityPath;
         }
 
+        static string GetPathForEntityNavigationPropertyEntity(string entityPath, IEdmNavigationProperty navProp)
+        {
+            foreach (var key in navProp.ToEntityType().Key())
+            {
+                entityPath = entityPath + "/" + navProp.Name + "/{" + key.Name + "}";
+            }
+
+            return entityPath;
+
+        }
+
+        static string GetPathForEntityNavigationPropertyEntitySet(string entityPath, IEdmNavigationProperty navProp)
+        {
+            foreach (var key in navProp.ToEntityType().Key())
+            {
+                entityPath = entityPath + "/" + navProp.Name + "/";
+            }
+
+            return entityPath;
+
+        }
+
         static JObject CreateSwaggerPathForOperationImport(IEdmOperationImport operationImport)
         {
+
+            Debug.Print("CreateSwaggerPathForOperationImport-Operation Name: " + operationImport.Name);
+
             JArray swaggerParameters = new JArray();
             foreach (var parameter in operationImport.Operation.Parameters)
             {
@@ -385,7 +424,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     operation.ReturnType.Definition);
             }
 
-            Debug.Print("Operation Name: " + operation.Name);
+            Debug.Print("CreateSwaggerPathForOperationOfEntitySet-Operation Name: " + operation.Name);
 
             JObject swaggerOperation = new JObject()
                 .Summary("Call operation  " + operation.Name)
@@ -406,6 +445,8 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
 
         static JObject CreateSwaggerPathForOperationOfEntity(IEdmOperation operation, IEdmEntitySet entitySet)
         {
+            Debug.Print("CreateSwaggerPathForOperationOfEntity-Operation Name: " + operation.Name);
+
             JArray swaggerParameters = new JArray();
 
             foreach (var key in entitySet.EntityType().Key())
@@ -470,6 +511,8 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
 
         static string GetPathForOperationOfEntitySet(IEdmOperation operation, IEdmEntitySet entitySet)
         {
+            Debug.Print("GetPathForOperationOfEntitySet-Operation Name: " + operation.Name);
+
             string swaggerOperationPath = "/" + entitySet.Name + "/" + operation.FullName() + "(";
             if (operation.IsFunction())
             {
@@ -573,15 +616,32 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             foreach (var entitySet in model.EntityContainer.EntitySets())
             {
                 swaggerPaths.Add("/" + entitySet.Name, CreatePathItemObjectForEntitySet(entitySet));
-                swaggerPaths.Add(GetPathForEntity(entitySet), CreatePathItemObjectForEntity(entitySet));
+                string pathForEntity = GetPathForEntity(entitySet);
+                swaggerPaths.Add(pathForEntity, CreatePathItemObjectForEntity(entitySet));
 
                 Debug.Print(entitySet.Name);
                 
+
+
                 //Let's not forget the navigation property paths....
-                foreach (var navProp in entitySet.NavigationPropertyBindings)
+                foreach (IEdmNavigationProperty navProp in entitySet.EntityType().NavigationProperties())
                 {
-                    Debug.Print("Navigation Property: " + navProp.NavigationProperty.Name);
-                    Debug.Print("Navigation Property Multiplicity: " + navProp.NavigationProperty.TargetMultiplicity().ToString());
+
+                    EdmMultiplicity navPropMultiplicity = navProp.TargetMultiplicity();
+                    if(navPropMultiplicity == EdmMultiplicity.Many) {
+
+                        //CreatePath
+                        swaggerPaths.Add(GetPathForEntityNavigationPropertyEntitySet(pathForEntity, navProp), CreatePathItemObjectForNavigationPropertyEntitySet(navProp));
+
+                        //It's supported so supporting it here... 
+                        Debug.Print("Navigation Property Path (shane): " + GetPathForEntityNavigationPropertyEntity(pathForEntity, navProp));
+                    }
+
+                    if(navPropMultiplicity == EdmMultiplicity.One || navPropMultiplicity == EdmMultiplicity.ZeroOrOne)
+                    {
+                        
+                    }
+
                 }
 
             }
