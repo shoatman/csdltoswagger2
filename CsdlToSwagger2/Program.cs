@@ -79,6 +79,19 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             return responses.ResponseRef("default", "Unexpected error", "#/definitions/_Error");
         }
 
+        public static JArray DefaultAuthorizationParameter(this JArray parameters)
+        {
+            parameters.Add(new JObject()
+            {
+                {"name", "Authorization"},
+                {"in", "header"},
+                {"description", "Specify the bearer token used to authorize access to this API"},
+                {"type", "string"},
+            });
+
+            return parameters;
+        }
+
         public static JObject Response(this JObject responses, string name, string description)
         {
             responses.Add(name, new JObject()
@@ -189,11 +202,11 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
         /// <summary>
         /// Parameters controlling the swagger generation
         /// </summary>
-        private const string metadataURI = @"D:\projects\csdltoswagger2\CsdlToSwagger2\msgraph.xml";
-        private const string host = "services.odata.org";
+        private const string metadataURI = @"C:\Users\shoatman\Documents\Visual Studio 2017\Projects\CsdlToSwagger2\CsdlToSwagger2\msgraph.xml";
+        private const string host = "graph.microsoft.com";
         private const string version = "1.0";
         private const string basePath = "/v1.0";
-        private const string outputFile = @"D:\projects\csdltoswagger2\CsdlToSwagger2\msgraph.json";
+        private const string outputFile = @"C:\Users\shoatman\Documents\Visual Studio 2017\Projects\CsdlToSwagger2\CsdlToSwagger2\msgraph.json";
 
         /// <summary>
         /// Returns the swagger API Operations (Get, Post) associated with an Entity Set (Collection)
@@ -202,6 +215,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
         /// <returns></returns>
         static JObject CreatePathItemObjectForEntitySet(IEdmEntitySet entitySet)
         {
+
             return new JObject()
             {
                 {
@@ -210,12 +224,17 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Description("Returns the EntitySet " + entitySet.Name)
                         .Tags(entitySet.Name)
                         .Parameters(new JArray()
+                            .Parameter("$search", "query", "Search criteria; name value pair seprate by a colon", "string")
+                            .Parameter("$filter", "query", "Filter the response based on one or more criteria", "string")
                             .Parameter("$expand", "query", "Expand navigation property", "string")
                             .Parameter("$select", "query", "select structural property", "string")
                             .Parameter("$orderby", "query", "order by some property", "string")
                             .Parameter("$top", "query", "top elements", "integer")
                             .Parameter("$skip", "query", "skip elements", "integer")
-                            .Parameter("$count", "query", "inlcude count in response", "boolean")
+                            .Parameter("$skipToken", "query", "Paging token that is used to get the next or previous set of results", "string")
+                            .Parameter("previous-page", "query", "When paging results indicates whether you want the previous page of results", "boolean")
+                            .Parameter("$count", "query", "include count in response", "boolean")
+                            .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
                             .Response("200", "EntitySet " + entitySet.Name, entitySet.EntityType())
@@ -231,6 +250,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Parameters(new JArray()
                             .Parameter(entitySet.EntityType().Name, "body", "The entity to post",
                                 entitySet.EntityType())
+                            .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
                             .Response("200", "EntitySet " + entitySet.Name, entitySet.EntityType())
@@ -240,7 +260,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             };
         }
 
-        static JObject CreatePathItemObjectForNavigationPropertyEntitySet(IEdmNavigationProperty navProp)
+        static JObject CreatePathItemObjectForNavigationPropertyMultipleEntitySet(IEdmNavigationProperty navProp)
         {
             IEdmEntityType targetEntity = navProp.ToEntityType();
             return new JObject()
@@ -250,12 +270,18 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Summary("Get navigation property collection " + navProp.Name)
                         .Description("Returns the  " + navProp.Name + " collection")
                         .Parameters(new JArray()
+                            .Parameter("id", "query", "the identifier of the parent object", "string")
+                            .Parameter("$search", "query", "Search criteria; name value pair seprate by a colon", "string")
+                            .Parameter("$filter", "query", "Filter the response based on one or more criteria", "string")
                             .Parameter("$expand", "query", "Expand navigation property", "string")
                             .Parameter("$select", "query", "select structural property", "string")
                             .Parameter("$orderby", "query", "order by some property", "string")
                             .Parameter("$top", "query", "top elements", "integer")
                             .Parameter("$skip", "query", "skip elements", "integer")
-                            .Parameter("$count", "query", "inlcude count in response", "boolean")
+                            .Parameter("$skipToken", "query", "Paging token that is used to get the next or previous set of results", "string")
+                            .Parameter("previous-page", "query", "When paging results indicates whether you want the previous page of results", "boolean")
+                            .Parameter("$count", "query", "include count in response", "boolean")
+                            .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
                             .Response("200", "EntitySet " + navProp.Name, targetEntity)
@@ -264,6 +290,53 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                 }
             };
         }
+
+        static JObject CreatePathItemObjectForNavigationPropertyEntitySetAdd(IEdmNavigationProperty navProp)
+        {
+            IEdmEntityType targetEntity = navProp.ToEntityType();
+            return new JObject()
+            {
+                {
+                    "post", new JObject()
+                        .Summary("Post a new ref to the navigation property collection " + navProp.Name)
+                        .Description("Post a new entity to EntitySet " + navProp.Name)
+                        .Tags(navProp.Name)
+                        .Parameters(new JArray()
+                            .Parameter("id", "query", "the identifier of the parent object", "string")
+                            .ParameterRef("ref", "body", "an object identifying the object to refer to", "_ref")
+                            .DefaultAuthorizationParameter()
+                        )
+                        .Responses(new JObject()
+                            .Response("204", "Empty response")
+                            .DefaultErrorResponse()
+                        )
+                }
+            };
+        }
+
+        static JObject CreatePathItemObjectForNavigationPropertyEntitySetRemove(IEdmNavigationProperty navProp)
+        {
+            IEdmEntityType targetEntity = navProp.ToEntityType();
+            return new JObject()
+            {
+                {
+                    "delete", new JObject()
+                        .Summary("Delete a ref from the navigation property collection " + navProp.Name)
+                        .Description("Delete a ref from the navigation property collection " + navProp.Name)
+                        .Tags(navProp.Name)
+                        .Parameters(new JArray()
+                            .Parameter("id", "query", "the identifier of the parent object", "string")
+                            .Parameter("refId", "query", "the identifier of the object you want to remove", "string")
+                            .DefaultAuthorizationParameter()
+                        )
+                        .Responses(new JObject()
+                            .Response("204", "Empty response")
+                            .DefaultErrorResponse()
+                        )
+                }
+            };
+        }
+
 
         /// <summary>
         /// Returns the path item object that corresponds to a resource/entity/element
@@ -289,6 +362,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Tags(entitySet.Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter("$select", "query", "description", "string")
+                            .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
                             .Response("200", "EntitySet " + entitySet.Name, entitySet.EntityType())
@@ -303,6 +377,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter(entitySet.EntityType().Name, "body", "The entity to patch",
                                 entitySet.EntityType())
+                            .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
                             .Response("204", "Empty response")
@@ -316,6 +391,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Tags(entitySet.Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter("If-Match", "header", "If-Match header", "string")
+                            .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
                             .Response("204", "Empty response")
@@ -325,7 +401,64 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             };
         }
 
-       
+        static JObject CreatePathItemObjectForNavigationPropertyEntity(IEdmNavigationProperty navProp)
+        {
+            var keyParameters = new JArray();
+            foreach (var key in navProp.ToEntityType().Key())
+            {
+                string format;
+                string type = GetPrimitiveTypeAndFormat(key.Type.Definition as IEdmPrimitiveType, out format);
+                keyParameters.Parameter(key.Name, "path", "key: " + key.Name, type, format);
+            }
+
+            return new JObject()
+            {
+                {
+                    "get", new JObject()
+                        .Summary("Get entity from " + navProp.Name + " by key.")
+                        .Description("Returns the entity with the key from " + navProp.Name)
+                        .Tags(navProp.Name)
+                        .Parameters((keyParameters.DeepClone() as JArray)
+                            .Parameter("id", "query", "The identifier of the object", "string")
+                            .DefaultAuthorizationParameter()
+                        )
+                        .Responses(new JObject()
+                            .Response("200", "EntitySet " + navProp.Name, navProp.ToEntityType())
+                            .DefaultErrorResponse()
+                        )
+                }
+            };
+        }
+
+        static JObject CreatePathItemObjectForNavigationPropertyZeroOrOne(IEdmNavigationProperty navProp)
+        {
+            var keyParameters = new JArray();
+            foreach (var key in navProp.ToEntityType().Key())
+            {
+                string format;
+                string type = GetPrimitiveTypeAndFormat(key.Type.Definition as IEdmPrimitiveType, out format);
+                keyParameters.Parameter(key.Name, "path", "key: " + key.Name, type, format);
+            }
+
+            return new JObject()
+            {
+                {
+                    "get", new JObject()
+                        .Summary("Get entity from " + navProp.Name + " by key.")
+                        .Description("Returns the entity with the key from " + navProp.Name)
+                        .Tags(navProp.Name)
+                        .Parameters((keyParameters.DeepClone() as JArray)
+                            .DefaultAuthorizationParameter()
+                        )
+                        .Responses(new JObject()
+                            .Response("200", "Entity " + navProp.Name, navProp.ToEntityType())
+                            .DefaultErrorResponse()
+                        )
+                }
+            };
+        }
+
+
         /// <summary>
         /// Returns the path (uri) associated with a collection and/or element
         /// </summary>
@@ -334,34 +467,41 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
         static string GetPathForEntity(IEdmEntitySet entitySet)
         {
             string singleEntityPath = "/" + entitySet.Name;
-            foreach (var key in entitySet.EntityType().Key())
-            {
-                singleEntityPath += "/{" + key.Name + "}";
-            }
+            var key = entitySet.EntityType().Key().First();
+            singleEntityPath += "/{" + key.Name + "}";
+            return singleEntityPath;
+        }
 
+        static string GetPathForEntityProperty(IEdmEntitySet entitySet)
+        {
+            string singleEntityPath = "/" + entitySet.Name;
+            singleEntityPath += "/{propertyName}";
             return singleEntityPath;
         }
 
         static string GetPathForEntityNavigationPropertyEntity(string entityPath, IEdmNavigationProperty navProp)
         {
-            foreach (var key in navProp.ToEntityType().Key())
-            {
-                entityPath = entityPath + "/" + navProp.Name + "/{" + key.Name + "}";
-            }
-
+            entityPath = entityPath + "/" + navProp.Name + "/{refId}";
             return entityPath;
+        }
 
+        static string GetPathForEntityNavigationPropertyEntityAdd(string entityPath, IEdmNavigationProperty navProp)
+        {
+            entityPath = entityPath + "/" + navProp.Name + "/$ref";
+            return entityPath;
+        }
+        static string GetPathForEntityNavigationPropertyEntityRemove(string entityPath, IEdmNavigationProperty navProp)
+        {
+            var key = navProp.ToEntityType().Key().First();
+            entityPath = entityPath + "/" + navProp.Name + "/{refId}/$ref";
+            return entityPath;
         }
 
         static string GetPathForEntityNavigationPropertyEntitySet(string entityPath, IEdmNavigationProperty navProp)
         {
-            foreach (var key in navProp.ToEntityType().Key())
-            {
-                entityPath = entityPath + "/" + navProp.Name + "/";
-            }
-
+            var key = navProp.ToEntityType().Key().First();
+            entityPath = entityPath + "/" + navProp.Name + "/";
             return entityPath;
-
         }
 
         static JObject CreateSwaggerPathForOperationImport(IEdmOperationImport operationImport)
@@ -549,7 +689,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     if (parameter.Type.Definition.TypeKind == EdmTypeKind.Primitive &&
                    (parameter.Type.Definition as IEdmPrimitiveType).PrimitiveKind == EdmPrimitiveTypeKind.String)
                     {
-                        swaggerOperationPath += parameter.Name + "=" + "'{" + parameter.Name + "}',";
+                        swaggerOperationPath += parameter.Name + "=" + "{" + parameter.Name + "},";
                     }
                     else
                     {
@@ -596,10 +736,9 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                 {"swagger", "2.0"},
                 {"info", new JObject()
                 {
-                    {"title", "OData Service"},
-                    {"description", "The OData Service at " + metadataURI},
-                    {"version", version},
-                    {"x-odata-version", "4.0"}
+                    {"title", "Microsoft Graph 1.0"},
+                    {"description", "The swagger for Microsoft Graph 1.0"},
+                    {"version", version}
                 }},
                 {"host", host},
                 {"schemes", new JArray("http")},
@@ -629,28 +768,24 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
 
                     EdmMultiplicity navPropMultiplicity = navProp.TargetMultiplicity();
                     if(navPropMultiplicity == EdmMultiplicity.Many) {
-
                         //CreatePath
-                        swaggerPaths.Add(GetPathForEntityNavigationPropertyEntitySet(pathForEntity, navProp), CreatePathItemObjectForNavigationPropertyEntitySet(navProp));
+                        swaggerPaths.Add(GetPathForEntityNavigationPropertyEntitySet(pathForEntity, navProp), CreatePathItemObjectForNavigationPropertyMultipleEntitySet(navProp));
 
                         //It's supported so supporting it here... 
-                        Debug.Print("Navigation Property Path (shane): " + GetPathForEntityNavigationPropertyEntity(pathForEntity, navProp));
+                        Debug.Print("Navigation Property Path (shane): " + GetPathForEntityNavigationPropertyEntitySet(pathForEntity, navProp));
+                    }
+                    else
+                    {
+                        swaggerPaths.Add(GetPathForEntityNavigationPropertyEntitySet(pathForEntity, navProp), CreatePathItemObjectForNavigationPropertyZeroOrOne(navProp));
                     }
 
-                    if(navPropMultiplicity == EdmMultiplicity.One || navPropMultiplicity == EdmMultiplicity.ZeroOrOne)
-                    {
-                        
-                    }
+                    swaggerPaths.Add(GetPathForEntityNavigationPropertyEntityAdd(pathForEntity, navProp), CreatePathItemObjectForNavigationPropertyEntitySetAdd(navProp));
+                    swaggerPaths.Add(GetPathForEntityNavigationPropertyEntityRemove(pathForEntity, navProp), CreatePathItemObjectForNavigationPropertyEntitySetRemove(navProp));
 
                 }
 
             }
 
-            //We also need to loop through the singletons... "me"
-            foreach(var single in model.EntityContainer.Singletons())
-            {
-                Debug.Print("Singleton: " + single.Name);
-            }
 
             foreach (var operationImport in model.EntityContainer.OperationImports())
             {
@@ -701,32 +836,38 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
 
             JObject _ref = JObject.Parse(@" {
                 'required': [
-                    'url'
+                    '@odata.id'
                 ],
                 'properties': {
-                    'url': {
+                    '@odata.id': {
                         'type': 'string',
                         'description': 'A URL uniquely identifying a specific object'
                     }
                 }
             }");
 
-            swaggerDefinitions.Add("_ref", _ref);
-            swaggerDefinitions.Add("_Error", new JObject()
-            {
-                {
-                    "properties", new JObject()
-                    {
-                        {"error", new JObject()
-                        {
-                            {"$ref", "#/definitions/_InError"}
-                        }
-                        }
+            JObject _propertyValue = JObject.Parse(@" {
+                'required': [
+                    '@odata.id',
+                    'value'
+                ],
+                'properties': {
+                    '@odata.context': {
+                        'type': 'string',
+                        'description': 'oData context'
+                    },
+                    'value': {
+                        'type': 'object',
+                        'description': 'The value of property requested'
                     }
                 }
-            });
-            swaggerDefinitions.Add("_InError", new JObject()
-            {
+            }");
+
+
+            swaggerDefinitions.Add("_ref", _ref);
+            swaggerDefinitions.Add("_propertyValue", _propertyValue);
+            swaggerDefinitions.Add("_Error", new JObject()
+             {
                 {
                     "properties", new JObject()
                     {
@@ -736,6 +877,31 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         }
                         },
                         {"message", new JObject()
+                        {
+                            {"type", "string"}
+                        }
+                        },
+                        {"error", new JObject()
+                        {
+                            {"$ref", "#/definitions/_InnerError"}
+                        }
+                        }
+                    }
+                }
+            });
+
+            
+            swaggerDefinitions.Add("_InnerError", new JObject()
+            {
+                {
+                    "properties", new JObject()
+                    {
+                        {"request-id", new JObject()
+                        {
+                            {"type", "string"}
+                        }
+                        },
+                        {"date", new JObject()
                         {
                             {"type", "string"}
                         }
