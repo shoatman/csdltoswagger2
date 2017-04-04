@@ -2,7 +2,9 @@
 // Licensed under the MIT License.  See License.txt in the project root for license information.
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Linq;
 using System.Xml;
 using Microsoft.OData.Edm;
@@ -163,7 +165,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                 {
                     "schema", new JObject()
                     {
-                        {"$ref", refType}
+                        {"$ref", "#/definitions/" + refType}
                     }
                 }
             });
@@ -192,6 +194,21 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             return jObject;
         }
 
+        public static JObject OperationId(this JObject jObject, params string[] ops)
+        {
+            StringBuilder sb = new StringBuilder();
+            TextInfo ti = CultureInfo.CurrentUICulture.TextInfo;
+
+            for (int i = 0; i < ops.Length; i++)
+            {
+                sb.Append(ti.ToTitleCase(ops[i]));
+            }
+
+            jObject.Add("operationId", sb.ToString());
+
+            return jObject;
+        }
+
     }
 
     /// <summary>
@@ -215,13 +232,13 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
         /// <returns></returns>
         static JObject CreatePathItemObjectForEntitySet(IEdmEntitySet entitySet)
         {
-
             return new JObject()
             {
                 {
                     "get", new JObject()
                         .Summary("Get EntitySet " + entitySet.Name)
                         .Description("Returns the EntitySet " + entitySet.Name)
+                        .OperationId("Get", entitySet.Name)
                         .Tags(entitySet.Name)
                         .Parameters(new JArray()
                             .Parameter("$search", "query", "Search criteria; name value pair seprate by a colon", "string")
@@ -246,6 +263,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "post", new JObject()
                         .Summary("Post a new entity to EntitySet " + entitySet.Name)
                         .Description("Post a new entity to EntitySet " + entitySet.Name)
+                        .OperationId("Add", entitySet.Name)
                         .Tags(entitySet.Name)
                         .Parameters(new JArray()
                             .Parameter(entitySet.EntityType().Name, "body", "The entity to post",
@@ -269,6 +287,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "get", new JObject()
                         .Summary("Get navigation property collection " + navProp.Name)
                         .Description("Returns the  " + navProp.Name + " collection")
+                        .OperationId("Get", navProp.DeclaringEntityType().Name, navProp.Name)
                         .Parameters(new JArray()
                             .Parameter("id", "query", "the identifier of the parent object", "string")
                             .Parameter("$search", "query", "Search criteria; name value pair seprate by a colon", "string")
@@ -300,6 +319,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "post", new JObject()
                         .Summary("Post a new ref to the navigation property collection " + navProp.Name)
                         .Description("Post a new entity to EntitySet " + navProp.Name)
+                        .OperationId("Add", navProp.DeclaringEntityType().Name, navProp.Name)
                         .Tags(navProp.Name)
                         .Parameters(new JArray()
                             .Parameter("id", "query", "the identifier of the parent object", "string")
@@ -323,6 +343,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "delete", new JObject()
                         .Summary("Delete a ref from the navigation property collection " + navProp.Name)
                         .Description("Delete a ref from the navigation property collection " + navProp.Name)
+                        .OperationId("Remove", navProp.DeclaringEntityType().Name, navProp.Name)
                         .Tags(navProp.Name)
                         .Parameters(new JArray()
                             .Parameter("id", "query", "the identifier of the parent object", "string")
@@ -359,6 +380,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "get", new JObject()
                         .Summary("Get entity from " + entitySet.Name + " by key.")
                         .Description("Returns the entity with the key from " + entitySet.Name)
+                        .OperationId("Get", entitySet.EntityType().Name)
                         .Tags(entitySet.Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter("$select", "query", "description", "string")
@@ -373,7 +395,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "patch", new JObject()
                         .Summary("Update entity in EntitySet " + entitySet.Name)
                         .Description("Update entity in EntitySet " + entitySet.Name)
-                        .Tags(entitySet.Name)
+                        .OperationId("Update", entitySet.EntityType().Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter(entitySet.EntityType().Name, "body", "The entity to patch",
                                 entitySet.EntityType())
@@ -388,6 +410,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "delete", new JObject()
                         .Summary("Delete entity in EntitySet " + entitySet.Name)
                         .Description("Delete entity in EntitySet " + entitySet.Name)
+                        .OperationId("Delete", entitySet.EntityType().Name)
                         .Tags(entitySet.Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter("If-Match", "header", "If-Match header", "string")
@@ -417,6 +440,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "get", new JObject()
                         .Summary("Get entity from " + navProp.Name + " by key.")
                         .Description("Returns the entity with the key from " + navProp.Name)
+                        .OperationId("Get", navProp.DeclaringEntityType().Name, navProp.Name)
                         .Tags(navProp.Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .Parameter("id", "query", "The identifier of the object", "string")
@@ -446,6 +470,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                     "get", new JObject()
                         .Summary("Get entity from " + navProp.Name + " by key.")
                         .Description("Returns the entity with the key from " + navProp.Name)
+                        .OperationId("Get", navProp.DeclaringEntityType().Name, navProp.Name)
                         .Tags(navProp.Name)
                         .Parameters((keyParameters.DeepClone() as JArray)
                             .DefaultAuthorizationParameter()
