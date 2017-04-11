@@ -62,18 +62,13 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                 {
                     "schema", new JObject()
                     {
-                        {"type", "array"},
-                        {
-                            "items", new JObject()
-                            {
-                                {"$ref", refType}
-                            }
-                        }
+                        {"$ref", "#/definitions/" + refType + "Response"}
                     }
                 }
             });
 
             return responses;
+
         }
 
         public static JObject DefaultErrorResponse(this JObject responses)
@@ -254,7 +249,8 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                             .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
-                            .Response("200", "EntitySet " + entitySet.Name, entitySet.EntityType())
+                            //.Response("200", "EntitySet " + entitySet.Name, entitySet.EntityType()) //There's a ResponseArrayRef
+                            .ResponseArrayRef("200", "EntitySet " + entitySet.Name, entitySet.EntityType().FullTypeName())
                             .DefaultErrorResponse()
                         )
 
@@ -289,7 +285,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                         .Description("Returns the  " + navProp.Name + " collection")
                         .OperationId("Get", navProp.DeclaringEntityType().Name, navProp.Name)
                         .Parameters(new JArray()
-                            .Parameter("id", "query", "the identifier of the parent object", "string")
+                            .Parameter("id", "path", "the identifier of the parent object", "string")
                             .Parameter("$search", "query", "Search criteria; name value pair seprate by a colon", "string")
                             .Parameter("$filter", "query", "Filter the response based on one or more criteria", "string")
                             .Parameter("$expand", "query", "Expand navigation property", "string")
@@ -303,7 +299,8 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                             .DefaultAuthorizationParameter()
                         )
                         .Responses(new JObject()
-                            .Response("200", "EntitySet " + navProp.Name, targetEntity)
+                            //.Response("200", "EntitySet " + navProp.Name, targetEntity)
+                            .ResponseArrayRef("200", "EntitySet " + navProp.Name, targetEntity.FullTypeName())
                             .DefaultErrorResponse()
                         )
                 }
@@ -734,6 +731,7 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
 
         static JObject CreateSwaggerDefinitionForStructureType(IEdmStructuredType edmType)
         {
+
             JObject swaggerProperties = new JObject();
             foreach (var property in edmType.StructuralProperties())
             {
@@ -741,10 +739,47 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                 SetSwaggerType(swaggerProperty, property.Type.Definition);
                 swaggerProperties.Add(property.Name, swaggerProperty);
             }
-            return new JObject()
+
+            //Add support for base type
+            //Root base type to be ignored: microsoft.graph.entity
+
+            string baseType = "";
+            if (edmType.BaseType()!= null)
             {
-                {"properties", swaggerProperties}
-            };
+                baseType = edmType.BaseType().FullTypeName();
+            }
+            JObject _EntityDefintiion = null;
+
+            if (baseType != "microsoft.graph.entity")
+            {
+                if(baseType == "microsoft.graph.directoryObject")
+                {
+                    swaggerProperties.Remove("id");
+
+                    _EntityDefintiion = new JObject()
+                    {
+                        { "allOf", new JArray(new JObject(){{ "$ref", "#/definitions/microsoft.graph.directoryObject" } }, new JObject(){{"properties", swaggerProperties}}) }
+                    };
+
+                    //
+                }else
+                {
+                    _EntityDefintiion = new JObject()
+                    {
+                        {"properties", swaggerProperties}
+                    };
+                }
+            }
+            else
+            {
+                _EntityDefintiion = new JObject()
+                    {
+                        {"properties", swaggerProperties}
+                    };
+            }
+            
+
+            return _EntityDefintiion;
         }
 
         static void Main(string[] args)
@@ -777,15 +812,42 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             JObject swaggerDefinitions = new JObject();
             swaggerDoc.Add("definitions", swaggerDefinitions);
 
+            JObject _EntitySetResponseDefinition = null;
+
             foreach (var entitySet in model.EntityContainer.EntitySets())
             {
                 swaggerPaths.Add("/" + entitySet.Name, CreatePathItemObjectForEntitySet(entitySet));
                 string pathForEntity = GetPathForEntity(entitySet);
                 swaggerPaths.Add(pathForEntity, CreatePathItemObjectForEntity(entitySet));
 
-                Debug.Print(entitySet.Name);
-                
+                Debug.Print("definitions:" + entitySet.EntityType().FullTypeName());
 
+                _EntitySetResponseDefinition = new JObject(
+                       new JProperty("allOf",
+                           new JArray(
+                               new JObject(
+                                   new JProperty("$ref", "#/definitions/_responseBase")
+                                   ),
+                               new JObject(
+                                   new JProperty("properties",
+                                       new JObject(
+                                           new JProperty("value",
+                                               new JObject(
+                                                   new JProperty("type", "array"),
+                                                   new JProperty("items", new JObject(
+                                                           new JProperty("$ref", "#/definitions/" + entitySet.EntityType().FullTypeName())
+                                                       )
+                                                   )
+                                               )
+                                           )
+                                       )
+                                   )
+                               )
+                           )
+                       )
+                  );
+
+                swaggerDefinitions.Add(entitySet.EntityType().FullTypeName() + "Response", _EntitySetResponseDefinition);
 
                 //Let's not forget the navigation property paths....
                 foreach (IEdmNavigationProperty navProp in entitySet.EntityType().NavigationProperties())
@@ -819,7 +881,11 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
 
             foreach (var type in model.SchemaElements.OfType<IEdmStructuredType>())
             {
-                swaggerDefinitions.Add(type.FullTypeName(), CreateSwaggerDefinitionForStructureType(type));
+                if (type.FullTypeName() != "microsoft.graph.directoryObject") { 
+                    swaggerDefinitions.Add(type.FullTypeName(), CreateSwaggerDefinitionForStructureType(type));
+
+                   
+                }
             }
 
             foreach (var operation in model.SchemaElements.OfType<IEdmOperation>())
@@ -859,6 +925,37 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
             }
 
 
+            JObject _directoryObject = JObject.Parse(@" {
+                'discriminator': [
+                    '@odata.type'
+                ],
+                'properties': {
+                    '@odata.type': {
+                        'type': 'string',
+                    },
+                    '@odata.context': {
+                        'type': 'string',
+                    },
+                    'id': {
+                        'type': 'string',
+                    }
+                }
+            }");
+
+            JObject _responseBase = JObject.Parse(@" {
+                'discriminator': [
+                    '@odata.context'
+                ],
+                'properties': {
+                    '@odata.context': {
+                        'type': 'string',
+                    },
+                    '@odata.nextLink': {
+                        'type': 'string',
+                    }
+                }
+            }");
+
             JObject _ref = JObject.Parse(@" {
                 'required': [
                     '@odata.id'
@@ -888,7 +985,8 @@ namespace Microsoft.Identity.Experiments.CsdlToSwagger2
                 }
             }");
 
-
+            swaggerDefinitions.Add("microsoft.graph.directoryObject", _directoryObject);
+            swaggerDefinitions.Add("_responseBase", _responseBase);
             swaggerDefinitions.Add("_ref", _ref);
             swaggerDefinitions.Add("_propertyValue", _propertyValue);
             swaggerDefinitions.Add("_Error", new JObject()
